@@ -22,11 +22,11 @@ var dg *discordgo.Session
 var commands = []*discordgo.ApplicationCommand{
 	{
 		Name:        "faceit",
-		Description: "it just like faceitfinder.com",
+		Description: "it just like faceitfinder",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:        discordgo.ApplicationCommandOptionString,
-				Name:        "steam url",
+				Name:        "steam_url",
 				Description: "the full steam url of the person you want to look up",
 				Required:    true,
 			},
