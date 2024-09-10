@@ -112,22 +112,14 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		FACEITAPI := os.Getenv("FACEIT_API")
 		// Create an HTTP client
 		client := &http.Client{}
-		url := "https://open.faceit.com/data/v4/players"
-		url = url + FACEITAPI
-		// Get the nickname query parameter from the request
-		nicknameQuery := steam64ID
-
-		// Append the nickname query parameter to the URL
-		//reqURL := "https://open.faceit.com/data/v4/players=" + nicknameQuery
-		reqURL := url + nicknameQuery
+		url := fmt.Sprintf("https://open.faceit.com/data/v4/players?game_player_id=%v&game=cs2", steam64ID)
 
 		// Make a GET request
-		req, err := http.NewRequest("GET", reqURL, nil)
+		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			fmt.Println("Error creating request:", err)
 			return
 		}
-		log.Println(req)
 
 		// Add headers if needed (e.g., authentication)
 		req.Header.Add("Authorization", "Bearer "+FACEITAPI)
@@ -146,44 +138,20 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 			fmt.Println("Error reading response:", err)
 			return
 		}
-
 		// Parse JSON response
 		var player PlayerInfo
 		if err := json.Unmarshal(body, &player); err != nil {
 			log.Println("Failed to unmarshal JSON:", err)
 			return
 		}
-		log.Println(player)
-		/*
-			playerFormat := PlayerInfo{
-				Nickname: player.Nickname,
-				PlayerID: player.PlayerID,
-				Games: map[string]Games{
-					"cs2": {
-						FaceitElo:      player.Games["cs2"].FaceitElo,
-						GamePlayerID:   player.Games["cs2"].GamePlayerID,
-						GamePlayerName: player.Games["cs2"].GamePlayerName,
-						Region:         player.Games["cs2"].Region,
-						SkillLevel:     player.Games["cs2"].SkillLevel,
-					},
-				},
-			}
 
-			responsePlayer, err := json.Marshal(playerFormat)
-			if err != nil {
-				http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
-				return
-			}
+		//elo, navn, lokasjon, skilllevel
+		faceitElo := player.Games["cs2"].FaceitElo
+		faceitName := player.Games["cs2"].GamePlayerName
+		faceitRegion := player.Games["cs2"].Region
+		faceitSkill := player.Games["cs2"].SkillLevel
 
-			w.Header().Set("Content-Type", "application/json")
-			_, err = w.Write(responsePlayer)
-			if err != nil {
-				log.Println("Failed to write JSON response:", err)
-				return
-			}
-
-			// Print the player's nickname
-			fmt.Println("Player's nickname:", player.Nickname) */
+		log.Print(faceitElo, faceitName, faceitRegion, faceitSkill)
 	},
 }
 
