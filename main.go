@@ -150,10 +150,7 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 
 		// Parse JSON response
 		var player PlayerInfo
-		if err := json.Unmarshal(body, &player); err != nil {
-			log.Println("Failed to unmarshal JSON:", err)
-			return
-		}
+		_ = json.Unmarshal(body, &player)
 
 		// Extract relevant data
 		faceitElo := player.Games["cs2"].FaceitElo

@@ -1,5 +1,11 @@
 # FaceitBot
+Needs crossplatform compliation!!!!!!!!!!
+```powershell
+$env:GOOS="linux"
+$env:GOARCH="amd64"
 
+
+```
 
 
 ## Getting started
