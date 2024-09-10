@@ -25,10 +25,13 @@ type ResolveVanityURLResponse struct {
 }
 
 type PlayerInfo struct {
-	Nickname string           `json:"nickname"`
-	PlayerID string           `json:"player_id"`
-	Games    map[string]Games `json:"games"`
+	Nickname  string           `json:"nickname"`
+	PlayerID  string           `json:"player_id"`
+	Games     map[string]Games `json:"games"`
+	Avatar    string           `json:"avatar"`
+	FaceitURL string           `json:"faceit_url"`
 }
+
 type Games struct {
 	FaceitElo      int    `json:"faceit_elo"`
 	GamePlayerID   string `json:"game_player_id"`
@@ -156,8 +159,10 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		faceitName := player.Games["cs2"].GamePlayerName
 		faceitRegion := player.Games["cs2"].Region
 		faceitSkill := player.Games["cs2"].SkillLevel
+		faceitAvatar := player.Avatar
+		faceitURL := strings.Replace(player.FaceitURL, "{lang}", "en", 1) // Bytt ut {lang} med en
 
-		log.Print(faceitElo, faceitName, faceitRegion, faceitSkill)
+		log.Print(faceitElo, "", faceitName, "", faceitRegion, "", faceitSkill, "", faceitAvatar, "", faceitURL)
 
 		// Create the embed
 		embed := &discordgo.MessageEmbed{
