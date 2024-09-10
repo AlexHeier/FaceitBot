@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -65,6 +66,11 @@ var commands = []*discordgo.ApplicationCommand{
 
 var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.InteractionCreate){
 	"faceit": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+
+		if err := acknowledgeInteraction(dg, i); err != nil {
+			return
+		}
+
 		steamURL := strings.ToLower(i.ApplicationCommandData().Options[0].StringValue())
 		log.Print("called faceit")
 
@@ -152,6 +158,41 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		faceitSkill := player.Games["cs2"].SkillLevel
 
 		log.Print(faceitElo, faceitName, faceitRegion, faceitSkill)
+
+		// Create the embed
+		embed := &discordgo.MessageEmbed{
+			Title: "FACEIT Player Information",
+			Color: 0x3498db, // Change the color as desired (hex color code)
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "Player Name",
+					Value:  faceitName,
+					Inline: true,
+				},
+				{
+					Name:   "Faceit Elo",
+					Value:  fmt.Sprintf("%d", faceitElo), // Assuming faceitElo is an integer
+					Inline: true,
+				},
+				{
+					Name:   "Region",
+					Value:  faceitRegion,
+					Inline: true,
+				},
+				{
+					Name:   "Skill Level",
+					Value:  strconv.Itoa(faceitSkill),
+					Inline: true,
+				},
+			},
+			Footer: &discordgo.MessageEmbedFooter{
+				Text: "Data retrieved from FACEIT API",
+			},
+		}
+
+		if err := sendEmbedResponse(s, i, embed); err != nil {
+			log.Printf("Error sending detailed response: %v", err)
+		}
 	},
 }
 
@@ -222,4 +263,24 @@ func main() {
 		}
 	}
 
+}
+
+func acknowledgeInteraction(dg *discordgo.Session, i *discordgo.InteractionCreate) error {
+	err := dg.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+	if err != nil {
+		log.Printf("Error acknowledging interaction: %v", err)
+	}
+	return err
+}
+
+func sendEmbedResponse(s *discordgo.Session, i *discordgo.InteractionCreate, embed *discordgo.MessageEmbed) error {
+	_, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		Embeds: []*discordgo.MessageEmbed{embed},
+	})
+	if err != nil {
+		log.Printf("Error sending follow-up embed message: %v", err)
+	}
+	return err
 }
