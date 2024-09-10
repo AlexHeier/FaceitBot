@@ -1,15 +1,44 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 )
+
+// struct for API responses
+type ResolveVanityURLResponse struct {
+	Response struct {
+		SteamID string `json:"steamid"`
+		Success int    `json:"success"`
+	} `json:"response"`
+}
+
+type PlayerInfo struct {
+	Nickname string           `json:"nickname"`
+	PlayerID string           `json:"player_id"`
+	Games    map[string]Games `json:"games"`
+}
+type Games struct {
+	FaceitElo      int    `json:"faceit_elo"`
+	GamePlayerID   string `json:"game_player_id"`
+	GamePlayerName string `json:"game_player_name"`
+	Region         string `json:"region"`
+	SkillLevel     int    `json:"skill_level"`
+}
+
+type APIResponse struct {
+	Items []interface{} `json:"items"`
+}
 
 // Variables to manage command-line flags.
 var GuildIDflag = flag.String("guild", "", "Test guild ID. If not passed - bot registers commands globally")
@@ -36,15 +65,51 @@ var commands = []*discordgo.ApplicationCommand{
 
 var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.InteractionCreate){
 	"faceit": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "This feature is under development!",
-			},
-		})
-		if err != nil {
-			log.Printf("Error responding to interaction: %v", err)
+		steamURL := strings.ToLower(i.ApplicationCommandData().Options[0].StringValue())
+		log.Print("called faceit")
+
+		if !strings.Contains(steamURL, "https://steamcommunity.com/profiles/") && !strings.Contains(steamURL, "https://steamcommunity.com/id/") {
+			return // repond with wrong syntax
 		}
+
+		steamSplit := strings.Split(steamURL, "/")
+
+		steam64ID := steamSplit[4]
+
+		if steamSplit[3] == "id" {
+
+			steamAPIKEY := os.Getenv("STEAM_API")
+			steamAPIUrl := fmt.Sprintf("https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key=%v&vanityurl=%v", steamAPIKEY, steamSplit[4])
+
+			req, err := http.NewRequest("GET", steamAPIUrl, nil)
+			if err != nil {
+				return // error
+			}
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+
+			if err != nil {
+				log.Printf("Error making request: %v. Retrying...", err)
+
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Printf("Error reading response: %v. Retrying...", err)
+			}
+
+			var resolveVanityURLResponse ResolveVanityURLResponse
+			err = json.Unmarshal(body, &resolveVanityURLResponse)
+			if err != nil {
+				fmt.Printf("Received JSON: %s\n", body)
+				log.Printf("Error parsing JSON: %v. Retrying...", err)
+			}
+
+			steam64ID = resolveVanityURLResponse.Response.SteamID
+		}
+
 	},
 }
 
