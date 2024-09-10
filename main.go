@@ -78,7 +78,7 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		log.Print("called faceit")
 
 		if !strings.Contains(steamURL, "https://steamcommunity.com/profiles/") && !strings.Contains(steamURL, "https://steamcommunity.com/id/") {
-			return // repond with wrong syntax
+			return // respond with wrong syntax
 		}
 
 		steamSplit := strings.Split(steamURL, "/")
@@ -100,7 +100,6 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 
 			if err != nil {
 				log.Printf("Error making request: %v. Retrying...", err)
-
 			}
 			defer resp.Body.Close()
 
@@ -118,6 +117,7 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 
 			steam64ID = resolveVanityURLResponse.Response.SteamID
 		}
+
 		FACEITAPI := os.Getenv("FACEIT_API")
 		// Create an HTTP client
 		client := &http.Client{}
@@ -147,6 +147,7 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 			fmt.Println("Error reading response:", err)
 			return
 		}
+
 		// Parse JSON response
 		var player PlayerInfo
 		if err := json.Unmarshal(body, &player); err != nil {
@@ -154,15 +155,13 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 			return
 		}
 
-		//elo, navn, lokasjon, skilllevel
+		// Extract relevant data
 		faceitElo := player.Games["cs2"].FaceitElo
 		faceitName := player.Games["cs2"].GamePlayerName
 		faceitRegion := player.Games["cs2"].Region
 		faceitSkill := player.Games["cs2"].SkillLevel
 		faceitAvatar := player.Avatar
-		faceitURL := strings.Replace(player.FaceitURL, "{lang}", "en", 1) // Bytt ut {lang} med en
-
-		log.Print(faceitElo, "", faceitName, "", faceitRegion, "", faceitSkill, "", faceitAvatar, "", faceitURL)
+		faceitURL := strings.Replace(player.FaceitURL, "{lang}", "en", 1) // Replace {lang} with 'en'
 
 		// Create the embed
 		embed := &discordgo.MessageEmbed{
@@ -190,11 +189,18 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 					Inline: true,
 				},
 			},
+			Thumbnail: &discordgo.MessageEmbedThumbnail{
+				URL: faceitAvatar, // Use this to display a smaller version of the avatar
+			},
 			Footer: &discordgo.MessageEmbedFooter{
 				Text: "Data retrieved from FACEIT API",
 			},
 		}
 
+		// Make the thumbnail clickable by using the image URL
+		embed.URL = faceitURL // Make the thumbnail link to the FACEIT profile
+
+		// Send the embed response
 		if err := sendEmbedResponse(s, i, embed); err != nil {
 			log.Printf("Error sending detailed response: %v", err)
 		}
