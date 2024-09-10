@@ -1,4 +1,4 @@
-package faceitbot
+package main
 
 import (
 	"flag"
