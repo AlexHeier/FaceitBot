@@ -160,42 +160,53 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		faceitAvatar := player.Avatar
 		faceitURL := strings.Replace(player.FaceitURL, "{lang}", "en", 1) // Replace {lang} with 'en'
 
-		// Create the embed
-		embed := &discordgo.MessageEmbed{
-			Title: "FACEIT Player Information",
-			Color: 0x3498db, // Change the color as desired (hex color code)
-			Fields: []*discordgo.MessageEmbedField{
-				{
-					Name:   "Player Name",
-					Value:  faceitName,
-					Inline: true,
-				},
-				{
-					Name:   "Faceit Elo",
-					Value:  fmt.Sprintf("%d", faceitElo), // Assuming faceitElo is an integer
-					Inline: true,
-				},
-				{
-					Name:   "Region",
-					Value:  faceitRegion,
-					Inline: true,
-				},
-				{
-					Name:   "Skill Level",
-					Value:  strconv.Itoa(faceitSkill),
-					Inline: true,
-				},
-			},
-			Thumbnail: &discordgo.MessageEmbedThumbnail{
-				URL: faceitAvatar, // Use this to display a smaller version of the avatar
-			},
-			Footer: &discordgo.MessageEmbedFooter{
-				Text: "Data retrieved from FACEIT API",
-			},
-		}
+		embed := &discordgo.MessageEmbed{}
 
-		// Make the thumbnail clickable by using the image URL
-		embed.URL = faceitURL // Make the thumbnail link to the FACEIT profile
+		// Create the embed
+		if faceitName == "" && faceitURL == "" {
+			embed = &discordgo.MessageEmbed{
+				Title: "Player has no FACEIT account. He is probably cheating!!!!!",
+				Color: 0xff0000,
+			}
+
+		} else {
+			embed = &discordgo.MessageEmbed{
+				Title: "FACEIT Player Information",
+				Color: 0x3498db, // Change the color as desired (hex color code)
+				Fields: []*discordgo.MessageEmbedField{
+					{
+						Name:   "Player Name",
+						Value:  faceitName,
+						Inline: true,
+					},
+					{
+						Name:   "Faceit Elo",
+						Value:  fmt.Sprintf("%d", faceitElo), // Assuming faceitElo is an integer
+						Inline: true,
+					},
+					{
+						Name:   "Region",
+						Value:  faceitRegion,
+						Inline: true,
+					},
+					{
+						Name:   "Skill Level",
+						Value:  strconv.Itoa(faceitSkill),
+						Inline: true,
+					},
+				},
+				Thumbnail: &discordgo.MessageEmbedThumbnail{
+					URL: faceitAvatar, // Use this to display a smaller version of the avatar
+				},
+				Footer: &discordgo.MessageEmbedFooter{
+					Text: "Data retrieved from FACEIT API",
+				},
+			}
+
+			// Make the thumbnail clickable by using the image URL
+			embed.URL = faceitURL
+		}
+		// Make the thumbnail link to the FACEIT profile
 
 		// Send the embed response
 		if err := sendEmbedResponse(s, i, embed); err != nil {
