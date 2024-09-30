@@ -75,7 +75,6 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		}
 
 		steamURL := strings.ToLower(i.ApplicationCommandData().Options[0].StringValue())
-		log.Print("called faceit")
 
 		if !strings.Contains(steamURL, "https://steamcommunity.com/profiles/") && !strings.Contains(steamURL, "https://steamcommunity.com/id/") {
 			return // respond with wrong syntax
@@ -153,12 +152,16 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		_ = json.Unmarshal(body, &player)
 
 		// Extract relevant data
-		faceitElo := player.Games["cs2"].FaceitElo
+		faceitEloCS2 := player.Games["cs2"].FaceitElo
 		faceitName := player.Games["cs2"].GamePlayerName
 		faceitRegion := player.Games["cs2"].Region
-		faceitSkill := player.Games["cs2"].SkillLevel
+		faceitSkillCS2 := player.Games["cs2"].SkillLevel
 		faceitAvatar := player.Avatar
 		faceitURL := strings.Replace(player.FaceitURL, "{lang}", "en", 1) // Replace {lang} with 'en'
+		faceitEloCSGO := player.Games["csgo"].FaceitElo
+		faceitSkillCSGO := player.Games["csgo"].SkillLevel
+
+		embedColor := findEmbedColor(faceitSkillCS2)
 
 		embed := &discordgo.MessageEmbed{}
 
@@ -172,8 +175,13 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		} else {
 			embed = &discordgo.MessageEmbed{
 				Title: "FACEIT Player Information",
-				Color: 0x3498db, // Change the color as desired (hex color code)
+				Color: embedColor, // Change the color as desired (hex collor code)
 				Fields: []*discordgo.MessageEmbedField{
+					{
+						Name:   "\u200B",
+						Value:  "CS2 Stats:",
+						Inline: false,
+					},
 					{
 						Name:   "Player Name",
 						Value:  faceitName,
@@ -181,7 +189,12 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 					},
 					{
 						Name:   "Faceit Elo",
-						Value:  fmt.Sprintf("%d", faceitElo), // Assuming faceitElo is an integer
+						Value:  fmt.Sprintf("%d", faceitEloCS2),
+						Inline: true,
+					},
+					{
+						Name:   "Skill Level",
+						Value:  strconv.Itoa(faceitSkillCS2),
 						Inline: true,
 					},
 					{
@@ -190,8 +203,18 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 						Inline: true,
 					},
 					{
+						Name:   "\u200B",
+						Value:  "CS:GO Stats:",
+						Inline: false,
+					},
+					{
+						Name:   "Faceit Elo",
+						Value:  fmt.Sprintf("%d", faceitEloCSGO),
+						Inline: true,
+					},
+					{
 						Name:   "Skill Level",
-						Value:  strconv.Itoa(faceitSkill),
+						Value:  strconv.Itoa(faceitSkillCSGO),
 						Inline: true,
 					},
 				},
@@ -302,4 +325,49 @@ func sendEmbedResponse(s *discordgo.Session, i *discordgo.InteractionCreate, emb
 		log.Printf("Error sending follow-up embed message: %v", err)
 	}
 	return err
+}
+
+// Helper function to interpolate between two colors
+func interpolateColor(color1, color2 int, t float64) int {
+	r1 := (color1 >> 16) & 0xFF
+	g1 := (color1 >> 8) & 0xFF
+	b1 := color1 & 0xFF
+
+	r2 := (color2 >> 16) & 0xFF
+	g2 := (color2 >> 8) & 0xFF
+	b2 := color2 & 0xFF
+
+	r := int(float64(r1)*(1-t) + float64(r2)*t)
+	g := int(float64(g1)*(1-t) + float64(g2)*t)
+	b := int(float64(b1)*(1-t) + float64(b2)*t)
+
+	return (r << 16) | (g << 8) | b
+}
+
+// Function to determine the color based on skill level as an int
+func findEmbedColor(skillLevel int) int {
+	// Default color (blue)
+	defaultColor := 0x3498db
+
+	if skillLevel < 1 || skillLevel > 10 {
+		// Return default color if skill level is out of range
+		return defaultColor
+	}
+
+	if skillLevel >= 1 && skillLevel <= 5 {
+		// Green to yellow (1 to 5)
+		green := 0x00FF00
+		yellow := 0xFFFF00
+		t := float64(skillLevel-1) / 4.0
+		return interpolateColor(green, yellow, t)
+	} else if skillLevel > 5 && skillLevel <= 10 {
+		// Yellow to red (6 to 10)
+		yellow := 0xFFFF00
+		red := 0xFF0000
+		t := float64(skillLevel-5) / 5.0
+		return interpolateColor(yellow, red, t)
+	}
+
+	// Return default color as a fallback
+	return defaultColor
 }
