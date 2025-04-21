@@ -70,6 +70,8 @@ var commands = []*discordgo.ApplicationCommand{
 var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.InteractionCreate){
 	"faceit": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
+		client := &http.Client{}
+
 		if err := acknowledgeInteraction(dg, i); err != nil {
 			return
 		}
@@ -94,7 +96,6 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 				return // error
 			}
 
-			client := &http.Client{}
 			resp, err := client.Do(req)
 
 			if err != nil {
@@ -119,7 +120,6 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 
 		FACEITAPI := os.Getenv("FACEIT_API")
 		// Create an HTTP client
-		client := &http.Client{}
 		url := fmt.Sprintf("https://open.faceit.com/data/v4/players?game_player_id=%v&game=cs2", steam64ID)
 
 		// Make a GET request
@@ -129,7 +129,6 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 			return
 		}
 
-		// Add headers if needed (e.g., authentication)
 		req.Header.Add("Authorization", "Bearer "+FACEITAPI)
 
 		// Send the request
@@ -163,23 +162,29 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 
 		embedColor := findEmbedColor(faceitSkillCS2)
 
-		embed := &discordgo.MessageEmbed{}
+		var embed *discordgo.MessageEmbed
 
-		// Create the embed
+		// FACEIT logic
 		if faceitName == "" && faceitURL == "" {
 			embed = &discordgo.MessageEmbed{
 				Title: "Player has no FACEIT account. He is probably cheating!!!!!",
 				Color: 0xff0000,
-			}
-
-		} else {
-			embed = &discordgo.MessageEmbed{
-				Title: "FACEIT Player Information",
-				Color: embedColor, // Change the color as desired (hex collor code)
 				Fields: []*discordgo.MessageEmbedField{
 					{
 						Name:   "\u200B",
-						Value:  "CS2 Stats:",
+						Value:  "\u200B",
+						Inline: false,
+					},
+				},
+			}
+		} else {
+			embed = &discordgo.MessageEmbed{
+				Title: "Player Information",
+				Color: embedColor,
+				Fields: []*discordgo.MessageEmbedField{
+					{
+						Name:   "\u200B",
+						Value:  "**FACEIT CS2 Stats:**",
 						Inline: false,
 					},
 					{
@@ -204,7 +209,7 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 					},
 					{
 						Name:   "\u200B",
-						Value:  "CS:GO Stats:",
+						Value:  "**FACEIT CS:GO Stats:**",
 						Inline: false,
 					},
 					{
@@ -219,17 +224,45 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 					},
 				},
 				Thumbnail: &discordgo.MessageEmbedThumbnail{
-					URL: faceitAvatar, // Use this to display a smaller version of the avatar
+					URL: faceitAvatar,
 				},
 				Footer: &discordgo.MessageEmbedFooter{
-					Text: "Data retrieved from FACEIT API",
+					Text: "Data retrieved from Steam and FACEIT API",
 				},
 			}
-
-			// Make the thumbnail clickable by using the image URL
-			embed.URL = faceitURL
 		}
-		// Make the thumbnail link to the FACEIT profile
+
+		// Always add Steam info
+		last2, total := steamStats(steam64ID)
+		if total != 0 {
+			steamFields := []*discordgo.MessageEmbedField{
+				{
+					Name:   "\u200B",
+					Value:  "**CS2 Stats:**",
+					Inline: false,
+				},
+				{
+					Name:   "Total Playtime",
+					Value:  fmt.Sprintf("%d hours", total/60),
+					Inline: true,
+				},
+				{
+					Name:   "Last two weeks",
+					Value:  fmt.Sprintf("%d hours", last2/60),
+					Inline: true,
+				},
+			}
+			embed.Fields = append(embed.Fields, steamFields...)
+		} else {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:   "**Private Steam Profile**",
+				Value:  "\u200B",
+				Inline: false,
+			})
+		}
+
+		// Make the thumbnail clickable by using the image URL
+		embed.URL = faceitURL
 
 		// Send the embed response
 		if err := sendEmbedResponse(s, i, embed); err != nil {
@@ -349,11 +382,6 @@ func findEmbedColor(skillLevel int) int {
 	// Default color (blue)
 	defaultColor := 0x3498db
 
-	if skillLevel < 1 || skillLevel > 10 {
-		// Return default color if skill level is out of range
-		return defaultColor
-	}
-
 	if skillLevel >= 1 && skillLevel <= 5 {
 		// Green to yellow (1 to 5)
 		green := 0x00FF00
@@ -370,4 +398,47 @@ func findEmbedColor(skillLevel int) int {
 
 	// Return default color as a fallback
 	return defaultColor
+}
+
+type Game struct {
+	AppID           int `json:"appid"`
+	Playtime2Weeks  int `json:"playtime_2weeks"`
+	PlaytimeForever int `json:"playtime_forever"`
+}
+
+type Response struct {
+	Response struct {
+		Games []Game `json:"games"`
+	} `json:"response"`
+}
+
+func steamStats(steamID string) (last2weeks, totalplaytime int) {
+
+	urlSteamStats := fmt.Sprintf("http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=%v&steamid=%v&format=json", os.Getenv("STEAM_API"), steamID)
+
+	resp, err := http.Get(urlSteamStats)
+	if err != nil {
+		log.Printf("Error making request: %v", err)
+		return 0, 0
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response: %v", err)
+		return 0, 0
+	}
+	var data Response
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		log.Printf("Error parsing JSON: %v", err)
+		return 0, 0
+	}
+
+	for _, game := range data.Response.Games {
+		if game.AppID == 730 {
+			return game.Playtime2Weeks, game.PlaytimeForever
+		}
+	}
+	return 0, 0
 }
