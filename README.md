@@ -68,12 +68,11 @@ The bot will respond with an embedded message containing FACEIT stats for the us
 ## 🧠 Internals
 
 - Discord slash commands powered by `github.com/bwmarrin/discordgo`
-- Steam vanity URL resolution via `ISteamUser.ResolveVanityURL`
-- FACEIT data fetched from:
+- Steam vanity URL resolution via Steam API endpoint `ISteamUser.ResolveVanityURL`
+- FACEIT data fetched from FACEIT API endpoints:
   - `/data/v4/players`
   - `/data/v4/players/{id}/games/cs2/stats`
   - `/data/v4/players/{friend_id}/bans`
-- Handles rate-limiting and partial errors gracefully
 
 ---
 
