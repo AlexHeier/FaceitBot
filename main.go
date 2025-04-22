@@ -30,6 +30,9 @@ type PlayerInfo struct {
 	Games     map[string]Games `json:"games"`
 	Avatar    string           `json:"avatar"`
 	FaceitURL string           `json:"faceit_url"`
+	Country   string           `json:"country"`
+	FriendIDs []string         `json:"friends_ids"`
+	Verified  bool             `json:"verified"`
 }
 
 type Games struct {
@@ -42,6 +45,15 @@ type Games struct {
 
 type APIResponse struct {
 	Items []interface{} `json:"items"`
+}
+
+type statsAPIResponse struct {
+	Items []struct {
+		Stats struct {
+			Result string `json:"Result"`
+			Game   string `json:"Game"`
+		} `json:"stats"`
+	} `json:"items"`
 }
 
 // Variables to manage command-line flags.
@@ -151,6 +163,7 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		_ = json.Unmarshal(body, &player)
 
 		// Extract relevant data
+		faceitPlayerID := player.PlayerID
 		faceitEloCS2 := player.Games["cs2"].FaceitElo
 		faceitName := player.Games["cs2"].GamePlayerName
 		faceitRegion := player.Games["cs2"].Region
@@ -159,6 +172,97 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 		faceitURL := strings.Replace(player.FaceitURL, "{lang}", "en", 1) // Replace {lang} with 'en'
 		faceitEloCSGO := player.Games["csgo"].FaceitElo
 		faceitSkillCSGO := player.Games["csgo"].SkillLevel
+		faceitCountry := player.Country
+		faceitFriendIDs := player.FriendIDs
+		faceitFriendCount := len(faceitFriendIDs)
+		var faceitVerified string
+		if player.Verified {
+			faceitVerified = "Yes"
+		} else {
+			faceitVerified = "No!"
+		}
+
+		var banedFriends int = 0
+		for _, friendID := range faceitFriendIDs {
+			banurl := fmt.Sprintf("https://open.faceit.com/data/v4/players/%v/bans", friendID)
+			req, err := http.NewRequest("GET", banurl, nil)
+			if err != nil {
+				continue // error
+			}
+			req.Header.Add("Authorization", "Bearer "+FACEITAPI)
+			resp, err := client.Do(req)
+			if err != nil {
+				continue // error
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				continue // error
+			}
+			var apiResponse struct {
+				Items []any `json:"items"`
+			}
+			err = json.Unmarshal(body, &apiResponse)
+			if err != nil {
+				continue // error
+			}
+			if len(apiResponse.Items) > 0 {
+				banedFriends++
+			}
+		}
+		var wins, losses int
+		var WLResults []string
+
+		if faceitPlayerID != "" {
+			banurl := fmt.Sprintf("https://open.faceit.com/data/v4/players/%v/games/cs2/stats", faceitPlayerID)
+			req, err = http.NewRequest("GET", banurl, nil)
+			if err != nil {
+				return // error
+			}
+
+			req.Header.Add("Authorization", "Bearer "+FACEITAPI)
+
+			resp, err = client.Do(req)
+			if err != nil {
+				return
+			}
+
+			defer resp.Body.Close()
+
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return // error
+			}
+			var statsAPIResponse statsAPIResponse
+			err = json.Unmarshal(body, &statsAPIResponse)
+			if err != nil {
+				return // error
+			}
+			for _, item := range statsAPIResponse.Items {
+				if item.Stats.Game == "cs2" {
+					if item.Stats.Result == "1" {
+						wins++
+						WLResults = append(WLResults, "W")
+					} else if item.Stats.Result == "0" {
+						losses++
+						WLResults = append(WLResults, "L")
+					}
+				}
+			}
+		}
+		var WL string
+		if len(WLResults) > 5 {
+			WL = strings.Join(WLResults[:5], " ")
+		} else {
+			WL = strings.Join(WLResults, " ")
+		}
+
+		runes := []rune(WL)
+		for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+			runes[i], runes[j] = runes[j], runes[i]
+		}
+		WL = string(runes)
 
 		embedColor := findEmbedColor(faceitSkillCS2)
 
@@ -184,22 +288,12 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 				Fields: []*discordgo.MessageEmbedField{
 					{
 						Name:   "\u200B",
-						Value:  "**FACEIT CS2 Stats:**",
+						Value:  "**Genneral FACEIT Stats:**",
 						Inline: false,
 					},
 					{
-						Name:   "Player Name",
+						Name:   "Name",
 						Value:  faceitName,
-						Inline: true,
-					},
-					{
-						Name:   "Faceit Elo",
-						Value:  fmt.Sprintf("%d", faceitEloCS2),
-						Inline: true,
-					},
-					{
-						Name:   "Skill Level",
-						Value:  strconv.Itoa(faceitSkillCS2),
 						Inline: true,
 					},
 					{
@@ -208,17 +302,57 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 						Inline: true,
 					},
 					{
+						Name:   "Country",
+						Value:  strings.ToUpper(faceitCountry),
+						Inline: true,
+					},
+					{
+						Name:   "Friend Baned",
+						Value:  fmt.Sprintf("%d/%d", banedFriends, faceitFriendCount),
+						Inline: true,
+					},
+					{
+						Name:   "Verified",
+						Value:  faceitVerified,
+						Inline: true,
+					},
+					{
+						Name:   "\u200B",
+						Value:  "**FACEIT CS2 Stats:**",
+						Inline: false,
+					},
+					{
+						Name:   "Elo",
+						Value:  fmt.Sprintf("%d", faceitEloCS2),
+						Inline: true,
+					},
+					{
+						Name:   "Level",
+						Value:  strconv.Itoa(faceitSkillCS2),
+						Inline: true,
+					},
+					{
+						Name:   "Win % last 20",
+						Value:  strconv.Itoa(wins*100/(wins+losses)) + "%",
+						Inline: true,
+					},
+					{
+						Name:   "Last 5 W/L",
+						Value:  WL,
+						Inline: true,
+					},
+					{
 						Name:   "\u200B",
 						Value:  "**FACEIT CS:GO Stats:**",
 						Inline: false,
 					},
 					{
-						Name:   "Faceit Elo",
+						Name:   "Elo",
 						Value:  fmt.Sprintf("%d", faceitEloCSGO),
 						Inline: true,
 					},
 					{
-						Name:   "Skill Level",
+						Name:   "Level",
 						Value:  strconv.Itoa(faceitSkillCSGO),
 						Inline: true,
 					},
@@ -255,7 +389,7 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 			embed.Fields = append(embed.Fields, steamFields...)
 		} else {
 			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:   "**Private Steam Profile**",
+				Name:   "**Private Steam Playtime!**",
 				Value:  "\u200B",
 				Inline: false,
 			})
