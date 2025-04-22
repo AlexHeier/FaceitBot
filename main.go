@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
@@ -182,35 +183,52 @@ var commandHandlers = map[string]func(dg *discordgo.Session, i *discordgo.Intera
 			faceitVerified = "No!"
 		}
 
-		var banedFriends int = 0
-		for _, friendID := range faceitFriendIDs {
-			banurl := fmt.Sprintf("https://open.faceit.com/data/v4/players/%v/bans", friendID)
-			req, err := http.NewRequest("GET", banurl, nil)
-			if err != nil {
-				continue // error
-			}
-			req.Header.Add("Authorization", "Bearer "+FACEITAPI)
-			resp, err := client.Do(req)
-			if err != nil {
-				continue // error
-			}
-			defer resp.Body.Close()
+		var (
+			banedFriends int
+			mu           sync.Mutex
+			wg           sync.WaitGroup
+		)
 
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				continue // error
-			}
-			var apiResponse struct {
-				Items []any `json:"items"`
-			}
-			err = json.Unmarshal(body, &apiResponse)
-			if err != nil {
-				continue // error
-			}
-			if len(apiResponse.Items) > 0 {
-				banedFriends++
-			}
+		for _, friendID := range faceitFriendIDs {
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+
+				banurl := fmt.Sprintf("https://open.faceit.com/data/v4/players/%v/bans", id)
+				req, err := http.NewRequest("GET", banurl, nil)
+				if err != nil {
+					return
+				}
+				req.Header.Add("Authorization", "Bearer "+FACEITAPI)
+
+				resp, err := client.Do(req)
+				if err != nil {
+					return
+				}
+				defer resp.Body.Close()
+
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return
+				}
+
+				var apiResponse struct {
+					Items []any `json:"items"`
+				}
+				err = json.Unmarshal(body, &apiResponse)
+				if err != nil {
+					return
+				}
+
+				if len(apiResponse.Items) > 0 {
+					mu.Lock()
+					banedFriends++
+					mu.Unlock()
+				}
+			}(friendID)
 		}
+
+		wg.Wait()
 		var wins, losses int
 		var WLResults []string
 
